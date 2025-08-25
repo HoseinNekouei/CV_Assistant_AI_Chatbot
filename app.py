@@ -161,7 +161,7 @@ class ChatBotApp:
 
         for message in st.session_state.chat_history:
             role = 'human' if isinstance(message, HumanMessage) else 'ai_assistant'
-            avatar= r'avatar/no_name.png' if role== 'human' else r'avatar/ELIZA.png'
+            avatar= r'avatar/no_name.png' if role== 'human' else r'avatar/Hossein.jpg'
             st.chat_message(role, avatar= avatar).markdown(message.content)
 
         if user_query and user_query.strip():
@@ -176,7 +176,7 @@ class ChatBotApp:
 
             st.chat_message(
                 'assistant', 
-                avatar=r'avatar/ELIZA.png').markdown(ai_message.content)
+                avatar=r'avatar/Hossein.jpg').markdown(ai_message.content)
             st.session_state.chat_history.append(ai_message)
 
 

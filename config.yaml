@@ -6,9 +6,8 @@ app:
 
 data:
   pdf_paths:
-    - "data/report1.pdf"
-    - "data/report2.pdf"
-    - "data/financials.pdf"
+    - "data/CV.pdf"
+    - "data/Cover_Letter.pdf"
 
 llm:
   model_name: "models/gemini-2.5-flash"
