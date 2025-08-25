@@ -1,0 +1,31 @@
+app:
+  title: "Multi-PDF Chatbot"
+  page_icon: "📚"
+  layout: "centered"
+  header: "📚 AI assistant chatbot about the contents of my CV "
+
+data:
+  pdf_paths:
+    - "data/report1.pdf"
+    - "data/report2.pdf"
+    - "data/financials.pdf"
+
+llm:
+  model_name: "models/gemini-2.5-flash"
+  temperature: 0.2
+
+rag:
+  chunk_size: 1000
+  chunk_overlap: 100
+  top_k: 4
+
+chat:
+  history_limit: 6
+  system_prompt: |
+    You are a helpful AI assistant. Use the provided context (from multiple PDFs) and chat history to answer.
+    If you don't know, just say "I don't know".
+
+
+debug:
+  clear_cache: false         # set true to clear st.cache_resource
+  verbose: true              # show extra logs in Streamlit
