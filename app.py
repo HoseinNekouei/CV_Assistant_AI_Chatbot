@@ -119,14 +119,16 @@ def get_response(query, chat_history):
     except Exception as e:
         return f"Error retrieving documents: {e}"
 
+    # Structured answer model prompt
     template = """
-    You are a helpful AI assistant. Answer the user questions considering the provided context and chat history.
-    If you don't know the answer, just say you don't know.
+    I am ready to answer your question based on the provided context and chat history. 
+    Please provide the user_question and context.
 
     Chat history: {chat_history}
     User question: {question}
     Context: {context}
     """
+
     prompt = ChatPromptTemplate.from_template(template)
 
     llm = GoogleGenerativeAI(
