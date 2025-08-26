@@ -114,6 +114,11 @@ def get_response(query, chat_history):
     
     output_parser = StrOutputParser()
 
+    context = ""
+    if retriever:
+        docs = retriever.invoke(query)
+        context = "\n\n".join(doc.page_content for doc in docs)
+
     template = """
         You are a helpful AI assistant. Use the provided context (from multiple PDFs) and chat history to answer.
         If you don't know, just say "I don't know".
@@ -136,11 +141,6 @@ def get_response(query, chat_history):
     if retriever is None:
         return
     try:
-        context = ""
-        if retriever:
-            docs = retriever.invoke(query)
-            context = "\n\n".join(doc.page_content for doc in docs)
-
         response = chain.invoke(
             {
                 "chat_history": chat_history,
