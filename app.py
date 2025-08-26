@@ -36,10 +36,9 @@ class ConfigManager:
 
 
 @st.cache_resource
-def load_embeddings():
-    """
-    Load Google Generative AI embeddings with proper event loop handling.
-    """
+def load_embeddings():    
+    # Load Google Generative AI embeddings with proper event loop handling.
+    
     import asyncio
     api_key = os.getenv('GOOGLE_API_KEY')
 
@@ -60,7 +59,7 @@ def load_embeddings():
 
 @st.cache_resource(show_spinner=False)
 def build_vector(pdf_paths, chunk_size, chunk_overlap, top_k):
-    """Load PDFs, split into chunks, build FAISS retriever."""
+    # Load PDFs, split into chunks, build FAISS retriever.
     
     if not pdf_paths:
         st.warning("No PDF files provided in config.")
@@ -104,7 +103,8 @@ def build_vector(pdf_paths, chunk_size, chunk_overlap, top_k):
 
 
 def get_response(query, chat_history):
-    """Get response from LLM + retriever context."""
+    # Get response from LLM + retriever context
+
     config= ConfigManager()
 
     pdf_paths = config.get("data", "pdf_paths", [])
@@ -113,14 +113,15 @@ def get_response(query, chat_history):
     top_k = config.get("rag", "top_k", 4)
     
     output_parser = StrOutputParser()
-    system_prompt = config.get('chat', 'system_prompt', '')
 
-    template = (
-        f"{system_prompt}\n"
-        "Chat history: {{chat_history}}\n"
-        "User question: {{question}}\n"
-        "Context: {{context}}\n"
-    )
+    template = """
+        You are a helpful AI assistant. Use the provided context (from multiple PDFs) and chat history to answer.
+        If you don't know, just say "I don't know".
+    
+        Chat history: {chat_history}
+        User question: {question}
+        Context: {context}
+    """
 
     prompt = ChatPromptTemplate.from_template(template)
 
@@ -137,7 +138,7 @@ def get_response(query, chat_history):
     try:
         context = ""
         if retriever:
-            docs = retriever.get_relevant_documents(query)
+            docs = retriever.invoke(query)
             context = "\n\n".join(doc.page_content for doc in docs)
 
         response = chain.invoke(

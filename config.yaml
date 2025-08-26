@@ -21,10 +21,6 @@ rag:
 
 chat:
   history_limit: 6
-  system_prompt: |
-    You are a helpful AI assistant. Use the provided context (from multiple PDFs) and chat history to answer.
-    If you don't know, just say "I don't know".
-
 
 debug:
   clear_cache: false         # set true to clear st.cache_resource
