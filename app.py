@@ -3,7 +3,6 @@ import yaml
 from pathlib import Path
 
 import streamlit as st
-from PyPDF2 import PdfReader
 from pydantic import SecretStr
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
@@ -14,9 +13,10 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.prompts import ChatPromptTemplate
 
+
 # ---------------- CONFIG MANAGER ----------------
 class ConfigManager:
-    """ Handles loading of yaml configuration """
+    """Handles loading of yaml configuration."""
 
     def __init__(self, path='config.yaml') -> None:
         self.path = path
@@ -29,206 +29,232 @@ class ConfigManager:
         except Exception as e:
             st.error(f'Error loading configuration {e}')
             return {}
-        
+
     def get(self, section, key=None, default=None):
         if key:
             return self.config.get(section, {}).get(key, default)
         return self.config.get(section, default)
 
 
+# ---------------- PDF MANAGER ----------------
+class PDFManager:
+    """Handles loading and processing of PDF files."""
+
+    def __init__(self, pdf_paths):
+        self.pdf_paths = pdf_paths
+        self.project_root = Path(__file__).parent
+
+    def load_documents(self):
+        documents = []
+        for pdf in self.pdf_paths:
+            pdf_path = (self.project_root / pdf).resolve()
+            if not pdf_path.exists():
+                st.error(f"File not found: {pdf_path}")
+                continue
+            try:
+                loader = PyPDFLoader(str(pdf_path))
+                pdf_docs = loader.load()
+                documents.extend(pdf_docs)
+
+            except Exception as e:
+                st.error(f"Error loading PDF {pdf_path}: {e}")
+        return documents
+
+
 # ---------------- EMBEDDINGS ----------------
 @st.cache_resource
 def load_embeddings():
-    """ Load Google Generative AI embeddings with proper event loop handling. """
     import asyncio
     api_key = os.getenv('GOOGLE_API_KEY')
     if not api_key:
         st.error("Google API key not found in environment.")
         st.stop()
-
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
-
     return GoogleGenerativeAIEmbeddings(
         model="models/embedding-001",
         google_api_key=SecretStr(api_key)
     )
 
-def get_pdf_text():
 
+@st.cache_resource
+def load_pdf_documents():
     config = ConfigManager()
+    pdf_paths = config.get("data", "pdf_paths", [])
     
-    pdf_paths = config.get("data", "pdf_paths", [])    
-
     if not pdf_paths:
         st.warning("No PDF files provided in config.")
-        return None
+        return []
+    
+    pdf_manager = PDFManager(pdf_paths)
+    return pdf_manager.load_documents()
 
-    project_root = Path(__file__).parent
 
-    raw_texts = ""
-    for pdf in pdf_paths:
-        pdf_path = (project_root / pdf).resolve()
-        st.write(pdf_path)
-
-        if not pdf_path.exists():
-            st.error(f"File not found: {pdf_path}")
-            continue
-
-        try:
-            loader = PyPDFLoader(str(pdf_path))
-            pdf_doc= loader.load()
-            raw_texts += pdf_doc[0].page_content
-
-        except Exception as e:
-            st.error(f"Error loading PDF {pdf_path}: {e}")
-            return "No documents available to provide context."
-
-    return raw_texts
-
-def get_chunk_text(texts):
+@st.cache_resource
+def split_documents_into_chunks(_documents):
 
     config = ConfigManager()
     chunk_size = config.get("rag", "chunk_size", 1000)
-    chunk_overlap = config.get("rag", "chunk_overlap", 100)
+    chunk_overlap = config.get("rag", "chunk_overlap", 200)
 
     text_splitter = RecursiveCharacterTextSplitter(
-        separators= ["\n\n", "\n", " ", ""],
-        chunk_size= chunk_size,
-        chunk_overlap= chunk_overlap,
-        length_function= len
+        separators=["\n\n", "\n", " ", ""],
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        length_function=len
     )
 
-    chunks = text_splitter.split_text(texts)
-    
+    chunks = []
+
+    for doc in _documents:
+        for chunk in text_splitter.split_text(doc.page_content):
+            chunks.append(chunk)
+
     return chunks
 
 
+@st.cache_resource
+def create_vector_store(chunks):
+
+    embedding = load_embeddings()
+    
+    try:
+        vector_store = FAISS.from_texts(chunks, embedding)
+    
+    except IndexError:
+        st.error("Embedding creation failed. Check your API key or embedding model.")
+        st.stop()
+    
+    except Exception as e:
+        st.error(f"Unexpected error while creating FAISS index: {e}")
+        st.stop()
+    
+    return vector_store
+
+
+def get_response(query, chat_history):
+    config = ConfigManager()
+    documents = load_pdf_documents()
+
+    if not documents:
+        return "No documents available to provide context."
+
+    text_chunks = split_documents_into_chunks(documents)
+
+    vector_store = create_vector_store(text_chunks)
+
+    try:
+        docs = vector_store.similarity_search(query, k=3)
+
+    except Exception as e:
+        st.error(f"Error during similarity search: {e}")
+        st.stop()
+
+    if not docs:
+        st.warning("No relevant content found for your query.")
+        return
+
+    context = "\n\n".join(doc.page_content for doc in docs)
+
+    # Structured answer model prompt
+    template = """
+    You are a helpful AI assistant. Answer the user questions considering the context and the chat history.
+    If you don't know the answer, just say you don't know. Don't try to make up:
+
+    Chat history: {chat_history}
+    User question: {question}
+    Context: {context}
+    """
+
+    prompt = ChatPromptTemplate.from_template(template)
+
+    llm = GoogleGenerativeAI(
+        model=config.get('llm', 'model_name', 'models/gemini-2.5-flash'),
+        temperature=config.get('llm', 'temperature', 0.3)
+    )
+
+    output_parser= StrOutputParser()
+
+    chain = prompt | llm | output_parser
+
+    try:
+        response = chain.invoke({
+            "chat_history": chat_history,
+            "question": query,
+            "context": context,
+        })
+
+        return response
+
+    except Exception as e:
+        st.error(f"Error generating response: {e}")
+        return "Sorry, I encountered an error while generating the response."
+
+
+def display_chat_history(chat_history):
+    
+    for message in chat_history:
+
+        role = 'human' if isinstance(message, HumanMessage) else 'assistant'
+        
+        avatar = r'avatar/no_name.png' if role == 'human' else r'avatar/ELIZA.png'
+        
+        st.chat_message(role, avatar=avatar).markdown(message.content)
 
 
 def main():
+    load_dotenv()
+    config = ConfigManager()
 
-    raw_texts = get_pdf_text()
-    text_cunks = get_chunk_text(raw_texts)
-    st.write(text_cunks)    
+    LLM_CONTEXT_TURNS = config.get('chat', 'history_limit', 6) or 6
+    
+    st.set_page_config(
+        page_title=config.get('app', 'page_title', 'CV Assistant'),
+        page_icon=config.get('app', 'page_icon', ':books:'),
+        layout=config.get('app', 'layout', 'centered')
+    )
+    
+    st.header(config.get('app', 'header', ''))
+    
+    # Sidebar cache clear option
+    if st.sidebar.checkbox("🔄 Clear Cache"):
+        st.cache_resource.clear()
+        st.sidebar.success("Cache cleared! Please refresh.")
 
-#     splitter = RecursiveCharacterTextSplitter(
-#         chunk_size=chunk_size,
-#         chunk_overlap=chunk_overlap
-#     )
-#     chunks = splitter.split_documents(all_docs)
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
 
-#     embedding = load_embeddings()
-#     vectorstore = FAISS.from_documents(chunks, embedding)
+    if 'welcome_added' not in st.session_state:
+        welcome_message = config.get('app', 'welcome_message', '') or "Hello, How can I help you?"
+        st.session_state.chat_history.append(AIMessage(content=welcome_message))
+        st.session_state.welcome_added = True
 
-#     return vectorstore.as_retriever(
-#         search_type='similarity',
-#         search_kwargs={'k': top_k}
-#     )
+    user_query = st.chat_input("Ask me Hossein's CV...", key='question')
 
-
-# # ---------------- LLM RESPONSE ----------------
-# def get_response(query, chat_history):
-#     """Get response from LLM with context from PDFs."""
-#     config = ConfigManager()
-#     pdf_paths = config.get("data", "pdf_paths", [])
-#     chunk_size = config.get("rag", "chunk_size", 1000)
-#     chunk_overlap = config.get("rag", "chunk_overlap", 100)
-#     top_k = config.get("rag", "top_k", 4)
-
-#     retriever = build_vector(pdf_paths, chunk_size, chunk_overlap, top_k)
-#     if retriever is None:
-#         return "No documents available to provide context."
-
-#     # Retrieve context
-#     context = ""
-#     try:
-#         docs = retriever.get_relevant_documents(query)
-#         context = "\n\n".join(doc.page_content for doc in docs)
-#     except Exception as e:
-#         return f"Error retrieving documents: {e}"
-
-#     # Structured answer model prompt
-#     template = """
-#     I am ready to answer your question based on the provided context and chat history. 
-#     Please provide the user_question and context.
-
-#     Chat history: {chat_history}
-#     User question: {question}
-#     Context: {context}
-#     """
-
-#     prompt = ChatPromptTemplate.from_template(template)
-
-#     llm = GoogleGenerativeAI(
-#         model=config.get('llm', 'model_name', 'models/gemini-2.5-flash'),
-#         temperature=config.get('llm', 'temperature', 0.2)
-#     )
-
-#     chain = prompt | llm | StrOutputParser()
-
-#     try:
-#         response = chain.invoke({
-#             "chat_history": chat_history,
-#             "question": query,
-#             "context": context,
-#         })
-#         return response
-#     except Exception as e:
-#         st.error(f"Error generating response: {e}")
-#         return "Sorry, I encountered an error while generating the response."
-
-
-# # ---------------- STREAMLIT APP ----------------
-# def main():
-#     load_dotenv()
-#     config = ConfigManager()
-
-#     if 'chat_history' not in st.session_state:
-#         st.session_state.chat_history = []
-
-#     if 'welcome_added' not in st.session_state:
-#         welcome_message = config.get('app', 'welcome_message', '') or "Hello, How can I help you?"
-#         st.session_state.chat_history.append(AIMessage(content=welcome_message))
-#         st.session_state.welcome_added = True
-
-#     LLM_CONTEXT_TURNS = config.get('chat', 'history_limit', 6) or 6
-
-#     st.set_page_config(
-#         page_title=config.get('app', 'page_title', 'CV Assistant'),
-#         page_icon=config.get('app', 'page_icon', ':books:'),
-#         layout=config.get('app', 'layout', 'centered')
-#     )
-
-#     st.header(config.get('app', 'header', ''))
-
-#     # Sidebar cache clear option
-#     if st.sidebar.checkbox("🔄 Clear Cache"):
-#         st.cache_resource.clear()
-#         st.sidebar.success("Cache cleared! Please refresh.")
-
-#     # Chat input
-#     user_query = st.chat_input("Ask me anything ...")
-
-#     for message in st.session_state.chat_history:
-#         role = 'human' if isinstance(message, HumanMessage) else 'assistant'
-#         avatar = r'avatar/no_name.png' if role == 'human' else r'avatar/Hossein.jpg'
-#         st.chat_message(role, avatar=avatar).markdown(message.content)
-
-#     if user_query and user_query.strip():
-#         st.session_state.chat_history.append(HumanMessage(content=user_query))
-#         st.chat_message('human', avatar=r'avatar/no_name.png').markdown(user_query)
-
-#         chat_history = st.session_state.chat_history[-LLM_CONTEXT_TURNS:]
-#         ai_response = get_response(user_query, chat_history)
-#         ai_message = AIMessage(content=ai_response or "Sorry, I have no response.")
-
-#         st.chat_message('assistant', avatar=r'avatar/Hossein.jpg').markdown(ai_message.content)
-#         st.session_state.chat_history.append(ai_message)
+    if not user_query:
+        display_chat_history(st.session_state.chat_history)
+        return
+    
+    display_chat_history(st.session_state.chat_history)
+    
+    if user_query and user_query.strip():
+    
+        st.session_state.chat_history.append(HumanMessage(content=user_query))
+    
+        st.chat_message('human', avatar=r'avatar/no_name.png').markdown(user_query)
+    
+        chat_history = st.session_state.chat_history[-LLM_CONTEXT_TURNS:]
+    
+        ai_response = get_response(user_query, chat_history)
+    
+        ai_message = AIMessage(content=ai_response or "Sorry, I have no response.")
+    
+        st.chat_message('assistant', avatar=r'avatar/ELIZA.png').markdown(ai_message.content)
+    
+        st.session_state.chat_history.append(ai_message)
 
 
 if __name__ == "__main__":
-
     main()
