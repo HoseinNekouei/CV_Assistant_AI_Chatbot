@@ -127,8 +127,8 @@ def get_response(query, chat_history):
         return f"Error retrieving documents: {e}"
 
     template = """
-        You are a helpful AI assistant. Use the provided context (from multiple PDFs) and chat history to answer.
-        If you don't know, just say "I don't know".
+        You are a helpful AI assistant. answer the user questions considering the provided context and chat history.
+        if you don't know the answer, just say you don't know. don't try to make up:
     
         Chat history: {chat_history}
         User question: {question}
