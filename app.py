@@ -113,11 +113,18 @@ def get_response(query, chat_history):
     top_k = config.get("rag", "top_k", 4)
     
     output_parser = StrOutputParser()
+    
+    retriever = build_vector(pdf_paths, chunk_size, chunk_overlap, top_k)
+    if retriever is None:
+        return
 
+    # Retrieve context
     context = ""
-    if retriever:
+    try:
         docs = retriever.invoke(query)
         context = "\n\n".join(doc.page_content for doc in docs)
+    except Exception as e:
+        return f"Error retrieving documents: {e}"
 
     template = """
         You are a helpful AI assistant. Use the provided context (from multiple PDFs) and chat history to answer.
@@ -137,9 +144,7 @@ def get_response(query, chat_history):
 
     chain= prompt | llm | output_parser
 
-    retriever = build_vector(pdf_paths, chunk_size, chunk_overlap, top_k)
-    if retriever is None:
-        return
+
     try:
         response = chain.invoke(
             {
