@@ -2,8 +2,8 @@ app:
   title: "Multi-PDF Chatbot"
   page_icon: "📚"
   layout: "centered"
-  header: "Hossein's CV AI assistant chatbot "
-  welcome_message: "سلام 👋، اگر سوالی در مورد رزومه ایشان دارید می تونید بپرسید "
+  header: "AI Assistant Chatbot"
+  welcome_message: "سلام 👋، من می تونم به سوالات شما در مورد رزومه حسین نکویی پاسخ بدم "
 
 data:
   pdf_paths:

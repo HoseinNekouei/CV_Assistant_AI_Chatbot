@@ -1,17 +1,19 @@
 import os
+import re
 import yaml
+import asyncio
 from pathlib import Path
 
 import streamlit as st
 from pydantic import SecretStr
 from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, GoogleGenerativeAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain.prompts import ChatPromptTemplate
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, GoogleGenerativeAI
 
 
 # ---------------- CONFIG MANAGER ----------------
@@ -26,6 +28,7 @@ class ConfigManager:
         try:
             with open(self.path, 'r') as file:
                 return yaml.safe_load(file)
+        
         except Exception as e:
             st.error(f'Error loading configuration {e}')
             return {}
@@ -33,6 +36,7 @@ class ConfigManager:
     def get(self, section, key=None, default=None):
         if key:
             return self.config.get(section, {}).get(key, default)
+        
         return self.config.get(section, default)
 
 
@@ -46,11 +50,14 @@ class PDFManager:
 
     def load_documents(self):
         documents = []
+        
         for pdf in self.pdf_paths:
             pdf_path = (self.project_root / pdf).resolve()
+        
             if not pdf_path.exists():
                 st.error(f"File not found: {pdf_path}")
                 continue
+        
             try:
                 loader = PyPDFLoader(str(pdf_path))
                 pdf_docs = loader.load()
@@ -58,28 +65,30 @@ class PDFManager:
 
             except Exception as e:
                 st.error(f"Error loading PDF {pdf_path}: {e}")
+        
         return documents
 
 
 # ---------------- EMBEDDINGS ----------------
-@st.cache_resource
 def load_embeddings():
-    import asyncio
+
     api_key = os.getenv('GOOGLE_API_KEY')
+    
     if not api_key:
         st.error("Google API key not found in environment.")
         st.stop()
     try:
         asyncio.get_running_loop()
+
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
+    
     return GoogleGenerativeAIEmbeddings(
         model="models/embedding-001",
         google_api_key=SecretStr(api_key)
     )
 
 
-@st.cache_resource
 def load_pdf_documents():
     config = ConfigManager()
     pdf_paths = config.get("data", "pdf_paths", [])
@@ -92,28 +101,28 @@ def load_pdf_documents():
     return pdf_manager.load_documents()
 
 
-@st.cache_resource
-def split_documents_into_chunks(_documents):
+def split_documents_into_chunks(documents):
 
     config = ConfigManager()
     chunk_size = config.get("rag", "chunk_size", 1000)
     chunk_overlap = config.get("rag", "chunk_overlap", 200)
 
     text_splitter = RecursiveCharacterTextSplitter(
-        separators=["\n\n", "\n", " ", ""],
+        separators=["\n\n", "\n"],
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         length_function=len
     )
 
-    chunks = []
+    texts= ""
+    for doc in documents:
+            texts += doc.page_content
 
-    for doc in _documents:
-        for chunk in text_splitter.split_text(doc.page_content):
-            chunks.append(chunk)
+    clean_text= clean_duplicates(texts)
 
+    chunks = text_splitter.split_text(clean_text)
+    st.write(chunks)
     return chunks
-
 
 @st.cache_resource
 def create_vector_store(text_chunks):
@@ -133,6 +142,11 @@ def create_vector_store(text_chunks):
     return vector_store
 
 
+def clean_duplicates(text):
+    # Replace 2+ consecutive same letters with just one
+    return re.sub(r'(.)\1+', r'\1', text)
+          
+
 def get_response(query, chat_history):
     config = ConfigManager()
     documents = load_pdf_documents()
@@ -144,18 +158,17 @@ def get_response(query, chat_history):
     vector_store = create_vector_store(text_chunks)
 
     try:
-        docs = vector_store.similarity_search(query, k=4)
-        st.write(f'docs result {docs}')
+        result_docs = vector_store.similarity_search(query, k=4)
     
     except Exception as e:
         st.error(f"Error during similarity search: {e}")
         st.stop()
 
-    if not docs:
+    if not result_docs:
         st.warning("No relevant content found for your query.")
         return
 
-    context = "\n\n".join(doc.page_content for doc in docs)
+    context = "\n\n".join(result_doc.page_content for result_doc in result_docs)
 
     # Structured answer model prompt
     template = """
@@ -231,6 +244,7 @@ def main():
         st.session_state.welcome_added = True
 
     user_query = st.chat_input("Ask me Hossein's CV...", key='question')
+
 
     if not user_query:
         display_chat_history(st.session_state.chat_history)
