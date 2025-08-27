@@ -121,7 +121,6 @@ def split_documents_into_chunks(documents):
     clean_text= clean_duplicates(texts)
 
     chunks = text_splitter.split_text(clean_text)
-    st.write(chunks)
     return chunks
 
 @st.cache_resource
@@ -184,7 +183,7 @@ def get_response(query, chat_history):
 
     llm = GoogleGenerativeAI(
         model=config.get('llm', 'model_name', 'models/gemini-2.5-flash'),
-        temperature=config.get('llm', 'temperature', 0.3)
+        temperature=config.get('llm', 'temperature', 0.2)
     )
 
     output_parser= StrOutputParser()
