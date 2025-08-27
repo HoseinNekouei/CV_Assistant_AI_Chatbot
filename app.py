@@ -116,12 +116,11 @@ def split_documents_into_chunks(_documents):
 
 
 @st.cache_resource
-def create_vector_store(chunks):
-
+def create_vector_store(text_chunks):
     embedding = load_embeddings()
     
     try:
-        vector_store = FAISS.from_texts(chunks, embedding)
+        vector_store = FAISS.from_texts(text_chunks, embedding)
     
     except IndexError:
         st.error("Embedding creation failed. Check your API key or embedding model.")
@@ -142,12 +141,12 @@ def get_response(query, chat_history):
         return "No documents available to provide context."
 
     text_chunks = split_documents_into_chunks(documents)
-
     vector_store = create_vector_store(text_chunks)
 
     try:
-        docs = vector_store.similarity_search(query, k=3)
-
+        docs = vector_store.similarity_search(query, k=4)
+        st.write(f'docs result {docs}')
+    
     except Exception as e:
         st.error(f"Error during similarity search: {e}")
         st.stop()
