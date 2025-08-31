@@ -119,8 +119,8 @@ def split_documents_into_chunks(documents):
             texts += doc.page_content
 
     clean_text= clean_duplicates(texts)
-
     chunks = text_splitter.split_text(clean_text)
+    
     return chunks
 
 @st.cache_resource
