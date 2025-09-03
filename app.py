@@ -3,7 +3,7 @@ import re
 import yaml
 import asyncio
 import hashlib
-from typing import List, Dict, Any
+from typing import List, Any
 from pathlib import Path
 
 import streamlit as st
@@ -168,11 +168,7 @@ class VectorStoreCache:
                 self.collection.persist()   
                 
                 return self.collection
-            
-            except IndexError:
-                st.error("Embedding creation failed. Check your API key or embedding model.")
-                st.stop()
-            
+                     
             except Exception as e:
                 st.error(f"Unexpected error while creating FAISS index: {e}")
                 st.stop()
