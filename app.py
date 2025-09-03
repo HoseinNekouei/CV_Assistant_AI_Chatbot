@@ -10,7 +10,7 @@ import streamlit as st
 from pydantic import SecretStr
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.document_loaders import PyPDFLoader
@@ -162,9 +162,7 @@ class VectorStoreCache:
                     embedding=self.embedding_model,
                     persist_directory=self.persist_dir
                     )
-                
-                self.collection.persist()   
-                
+                                
                 return self.collection
                      
             except Exception as e:
@@ -187,8 +185,6 @@ class VectorStoreCache:
                 ids = new_ids,
                 texts= new_chunks
                 )
-            self.collection.persist()
-
 
     def similarity_search(self, query: str, k=4):
 
