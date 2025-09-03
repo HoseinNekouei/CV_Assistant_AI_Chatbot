@@ -2,13 +2,14 @@ import os
 import re
 import yaml
 import asyncio
+import hashlib
 from pathlib import Path
 
 import streamlit as st
 from pydantic import SecretStr
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.document_loaders import PyPDFLoader
@@ -128,7 +129,7 @@ def create_vector_store(text_chunks):
     embedding = load_embeddings()
     
     try:
-        vector_store = FAISS.from_texts(text_chunks, embedding)
+        vector_store = Chroma.from_texts(text_chunks, embedding)
     
     except IndexError:
         st.error("Embedding creation failed. Check your API key or embedding model.")
@@ -145,6 +146,14 @@ def clean_duplicates(text):
     # Replace 2+ consecutive same letters with just one
     return re.sub(r'(.)\1+', r'\1', text)
           
+
+def hash_text(text:str)-> str:
+    hash_text =hashlib.sha256(text.encode()).hexdigest()
+    import pdb
+    pdb.set_trace()
+
+    return(hash_text)
+
 
 def get_response(query, chat_history):
     config = ConfigManager()
