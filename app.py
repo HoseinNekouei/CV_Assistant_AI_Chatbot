@@ -149,7 +149,7 @@ class VectorStoreCache:
 
     def load_or_create(self, text_chunks: List[str]):
         # Load Existing ChromaDB or create a new with only missing chunks
-        if os.path.exists(self.persist_dir):
+        if os.path.exists(self.persist_dir) and os.listdir((self.persist_dir)):
             #load existing collection
             self.collection= Chroma(
                 embedding_function= self.embedding_model,
@@ -166,7 +166,8 @@ class VectorStoreCache:
                     )
                 
                 self.collection.persist()   
-                return
+                
+                return self.collection
             
             except IndexError:
                 st.error("Embedding creation failed. Check your API key or embedding model.")
@@ -178,39 +179,29 @@ class VectorStoreCache:
 
         # check with chunks are missing
         existing_ids= set(self.collection.get()['ids'])
-        st.write(existing_ids)
-        new_chunks = [chunk for chunk in text_chunks if hash_text(chunk) not in existing_ids]
+
+        # Filter out chunks that already exist
+        new_chunks, new_ids= [],[]
+        for chunk in text_chunks:
+            chunk_id= hash_text(chunk)
+            if chunk_id not in existing_ids:
+                new_chunks.append(chunk)
+                new_ids.append(chunk_id)
 
         if new_chunks:
-            self.collection.add(texts= new_chunks)
+            self.collection.add_texts(
+                ids = new_ids,
+                texts= new_chunks
+                )
             self.collection.persist()
 
-        def similarity_search(query: str, k=4):
 
-            if not self.collection:
-                raise ValueError('Vecto store not loaded. call create_or_load() first')            
+    def similarity_search(self, query: str, k=4):
 
-            return self.collection.similarity_search(query, k=k)
+        if not self.collection:
+            raise ValueError('Vecto store not loaded. call create_or_load() first')            
 
-
-
-# --------------------VECTOR STORE ------------------------
-@st.cache_resource
-def create_vector_store(text_chunks):
-    embedding = load_embeddings()
-    
-    try:
-        vector_store = Chroma.from_texts(text_chunks, embedding)
-
-    except IndexError:
-        st.error("Embedding creation failed. Check your API key or embedding model.")
-        st.stop()
-    
-    except Exception as e:
-        st.error(f"Unexpected error while creating FAISS index: {e}")
-        st.stop()
-    
-    return vector_store
+        return self.collection.similarity_search(query, k=k)
 
 
 def get_response(query, chat_history):
@@ -221,10 +212,11 @@ def get_response(query, chat_history):
         return "No documents available to provide context."
 
     text_chunks = split_documents_into_chunks(documents)
-    vector_store = create_vector_store(text_chunks)
+    vector_cache = VectorStoreCache()
+    vector_cache.load_or_create(text_chunks)
 
     try:
-        result_docs = vector_store.similarity_search(query, k=4)
+        result_docs = vector_cache.similarity_search(query, k=4)
     
     except Exception as e:
         st.error(f"Error during similarity search: {e}")
