@@ -3,6 +3,7 @@ import re
 import yaml
 import asyncio
 import hashlib
+from typing import List, Dict, Any
 from pathlib import Path
 
 import streamlit as st
@@ -90,6 +91,7 @@ def load_embeddings():
     )
 
 
+#-------------------------UTILS--------------------------------
 def load_pdf_documents():
     config = ConfigManager()
     pdf_paths = config.get("data", "pdf_paths", [])
@@ -102,7 +104,19 @@ def load_pdf_documents():
     return pdf_manager.load_documents()
 
 
-def split_documents_into_chunks(documents):
+def clean_duplicates(text):
+    # Replace 2+ consecutive same letters with just one
+    return re.sub(r'(.)\1+', r'\1', text)
+          
+
+def hash_text(text:str)-> str:
+    hash_text =hashlib.sha256(text.encode()).hexdigest()
+    import pdb
+    pdb.set_trace()
+
+    return(hash_text)
+
+def split_documents_into_chunks(documents: List[Any]) -> List[str]:
 
     config = ConfigManager()
     chunk_size = config.get("rag", "chunk_size", 1000)
@@ -124,13 +138,70 @@ def split_documents_into_chunks(documents):
     
     return chunks
 
+#---------------------VECTOR STORE ------------------------------
+class VectorStoreCache:
+    """ ChromaDB-based Vector Store cache"""
+
+    def __init__(self, persist_dir='./Chroma_Store'):
+        self.persist_dir = persist_dir
+        self.embedding_model= load_embeddings()
+        self.collection = None
+
+    def load_or_create(self, text_chunks: List[str]):
+        # Load Existing ChromaDB or create a new with only missing chunks
+        if os.path.exists(self.persist_dir):
+            #load existing collection
+            self.collection= Chroma(
+                embedding_function= self.embedding_model,
+                persist_directory= self.persist_dir
+            )
+
+        else:
+            try:
+            #create a new collection
+                self.collection= Chroma.from_texts(
+                    texts= text_chunks,
+                    embedding=self.embedding_model,
+                    persist_directory=self.persist_dir
+                    )
+                
+                self.collection.persist()   
+                return
+            
+            except IndexError:
+                st.error("Embedding creation failed. Check your API key or embedding model.")
+                st.stop()
+            
+            except Exception as e:
+                st.error(f"Unexpected error while creating FAISS index: {e}")
+                st.stop()
+
+        # check with chunks are missing
+        existing_ids= set(self.collection.get()['ids'])
+        st.write(existing_ids)
+        new_chunks = [chunk for chunk in text_chunks if hash_text(chunk) not in existing_ids]
+
+        if new_chunks:
+            self.collection.add(texts= new_chunks)
+            self.collection.persist()
+
+        def similarity_search(query: str, k=4):
+
+            if not self.collection:
+                raise ValueError('Vecto store not loaded. call create_or_load() first')            
+
+            return self.collection.similarity_search(query, k=k)
+
+
+
+# --------------------VECTOR STORE ------------------------
 @st.cache_resource
 def create_vector_store(text_chunks):
     embedding = load_embeddings()
     
     try:
         vector_store = Chroma.from_texts(text_chunks, embedding)
-    
+
     except IndexError:
         st.error("Embedding creation failed. Check your API key or embedding model.")
         st.stop()
@@ -140,19 +211,6 @@ def create_vector_store(text_chunks):
         st.stop()
     
     return vector_store
-
-
-def clean_duplicates(text):
-    # Replace 2+ consecutive same letters with just one
-    return re.sub(r'(.)\1+', r'\1', text)
-          
-
-def hash_text(text:str)-> str:
-    hash_text =hashlib.sha256(text.encode()).hexdigest()
-    import pdb
-    pdb.set_trace()
-
-    return(hash_text)
 
 
 def get_response(query, chat_history):
