@@ -10,8 +10,8 @@ import streamlit as st
 from pydantic import SecretStr
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate
-from chromadb.config import Settings
 from langchain_chroma import Chroma
+from chromadb.config import Settings
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.document_loaders import PyPDFLoader
@@ -149,14 +149,14 @@ class VectorStoreCache:
     def load_or_create(self, text_chunks: List[str]):
         # Initialize Chroma client with DuckDB backend
         client_settings = Settings(chroma_db_impl="duckdb+parquet")
-        
+
         # Load Existing ChromaDB or create a new with only missing chunks
         if os.path.exists(self.persist_dir) and os.listdir((self.persist_dir)):
             #load existing collection
             self.collection= Chroma(
                 embedding_function= self.embedding_model,
                 persist_directory= self.persist_dir,
-                client_settings=client_settings 
+                client_settings= client_settings
             )
 
         else:
@@ -166,7 +166,7 @@ class VectorStoreCache:
                     texts= text_chunks,
                     embedding=self.embedding_model,
                     persist_directory=self.persist_dir,
-                    client_settings=client_settings
+                    client_settings= client_settings
                     )
                                 
                 return self.collection
