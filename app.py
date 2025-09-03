@@ -111,8 +111,6 @@ def clean_duplicates(text):
 
 def hash_text(text:str)-> str:
     hash_text =hashlib.sha256(text.encode()).hexdigest()
-    import pdb
-    pdb.set_trace()
 
     return(hash_text)
 
@@ -170,7 +168,7 @@ class VectorStoreCache:
                 return self.collection
                      
             except Exception as e:
-                st.error(f"Unexpected error while creating FAISS index: {e}")
+                st.error(f"Unexpected error while creating ChromaDB collection: {e}")
                 st.stop()
 
         # check with chunks are missing
