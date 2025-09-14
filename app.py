@@ -16,6 +16,7 @@ import streamlit as st
 from pydantic import SecretStr
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
@@ -91,11 +92,14 @@ def load_embeddings():
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
     
-    return GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
-        google_api_key=SecretStr(api_key)
-    )
+    # return GoogleGenerativeAIEmbeddings(
+    #     model="models/embedding-001",
+    #     google_api_key=SecretStr(api_key)
+    # )
 
+    model_name = "sentence-transformers/distiluse-base-multilingual-cased-v1"
+
+    return HuggingFaceEmbeddings(model_name=model_name)
 
 #-------------------------UTILS--------------------------------
 def load_pdf_documents():
