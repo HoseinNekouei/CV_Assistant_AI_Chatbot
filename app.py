@@ -7,6 +7,7 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import os
 import re
 import yaml
+import time
 import asyncio
 import hashlib
 from typing import List, Any
@@ -198,10 +199,10 @@ class VectorStoreCache:
         for cid, ctext in zip(new_ids, new_chunks):
             try:
                 self.collection.add_texts(ids=[cid], texts=[ctext])
-                time.sleep(2.0)  # <---- delay 1 second between calls
+                time.sleep(4.0)  # <---- delay 1 second between calls
             except Exception as e:
                 st.error(f"Error adding text {cid}: {e}")
-                time.sleep(5.0)  # <---- longer delay on error
+                time.sleep(7.0)  # <---- longer delay on error
             
 
     def similarity_search(self, query: str, k=4):
