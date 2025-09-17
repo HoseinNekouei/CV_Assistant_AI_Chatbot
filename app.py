@@ -128,7 +128,7 @@ def hash_text(text:str)-> str:
 def split_documents_into_chunks(documents: List[Any]) -> List[str]:
 
     config = ConfigManager()
-    chunk_size = config.get("rag", "chunk_size", 1000)
+    chunk_size = config.get("rag", "chunk_size", 500)
     chunk_overlap = config.get("rag", "chunk_overlap", 200)
 
     text_splitter = RecursiveCharacterTextSplitter(
