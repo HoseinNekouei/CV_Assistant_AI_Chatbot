@@ -92,14 +92,14 @@ def load_embeddings():
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
     
-    # return GoogleGenerativeAIEmbeddings(
-    #     model="models/embedding-001",
-    #     google_api_key=SecretStr(api_key)
-    # )
+    return GoogleGenerativeAIEmbeddings(
+        model="models/embedding-001",
+        google_api_key=SecretStr(api_key)
+    )
 
-    model_name = "sentence-transformers/distiluse-base-multilingual-cased-v1"
+    # model_name = "sentence-transformers/distiluse-base-multilingual-cased-v1"
 
-    return HuggingFaceEmbeddings(model_name=model_name)
+    # return HuggingFaceEmbeddings(model_name=model_name)
 
 #-------------------------UTILS--------------------------------
 def load_pdf_documents():
