@@ -159,12 +159,15 @@ class VectorStoreCache:
 
         # Load Existing ChromaDB or create a new with only missing chunks
         if os.path.exists(self.persist_dir) and os.listdir((self.persist_dir)):
-            #load existing collection
-            self.collection= Chroma(
-                embedding_function= self.embedding_model,
-                persist_directory= self.persist_dir,
-            )
-
+            try:
+                #load existing collection
+                self.collection= Chroma(
+                    embedding_function= self.embedding_model,
+                    persist_directory= self.persist_dir,
+                )
+            except Exception as e:
+                st.error(f"Unexpected error while creating ChromaDB collection: {e}")
+                st.stop()
         else:
             try:
             #create a new collection
@@ -191,11 +194,15 @@ class VectorStoreCache:
                 new_chunks.append(chunk)
                 new_ids.append(chunk_id)
 
-        if new_chunks:
-            self.collection.add_texts(
-                ids = new_ids,
-                texts= new_chunks
-                )
+        # Add new chunks with delay to avoid API rate limits
+        for cid, ctext in zip(new_ids, new_chunks):
+            try:
+                self.collection.add_texts(ids=[cid], texts=[ctext])
+                time.sleep(2.0)  # <---- delay 1 second between calls
+            except Exception as e:
+                st.error(f"Error adding text {cid}: {e}")
+                time.sleep(5.0)  # <---- longer delay on error
+            
 
     def similarity_search(self, query: str, k=4):
 
